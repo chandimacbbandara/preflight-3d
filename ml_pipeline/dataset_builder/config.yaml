@@ -1,17 +1,54 @@
 uco3d_root: "data/raw_uco3d"
 processed_root: "data/processed"
 
-# 8 diverse categories across shapes, sizes, and surface textures
+# 40 diverse categories selected from the downloaded subset (1 sequence each = 40 total)
 target_categories:
-  - "mug"               # Small, curved, often glossy ceramic (specular test)
-  - "sneakers"          # Medium, complex matte texture (ideal baseline)
-  - "laptop"            # Flat geometry, reflective screen + dark keyboard
-  - "teddy_bear"        # Soft, rich micro-texture, organic shape
-  - "bicycle"           # Large, thin tubular geometry (challenging SfM)
-  - "bowl"              # Concave interior occlusion test
-  - "toy"               # Diverse colors/shapes, plastic sheen
-  - "chair"             # Large furniture, multi-leg occlusion
+  # Transparent & Glossy (specular / refraction edge cases)
+  - "wineglass"
+  - "water_bottle"
+  - "perfume"
+  - "vase"
+  - "ashtray"
+  # Metallic & Reflective (glare / low-feature edge cases)
+  - "bass_horn"
+  - "pot"
+  - "flashlight"
+  - "aerosol_can"
+  - "fire_extinguisher"
+  - "motor"
+  - "binoculars"
+  - "cooker"
+  # Thin & Complex Geometry (SfM tracking edge cases)
+  - "shopping_cart"
+  - "chair"
+  - "helicopter"
+  - "speaker_stero_equipment"
+  - "telephone"
+  - "funnel"
+  # Organic & High-Texture Matte (strong reconstruction baselines)
+  - "shoe"
+  - "teddy_bear"
+  - "pinecone"
+  - "handbag"
+  - "pillow"
+  - "hand_towel"
+  - "shirt"
+  - "cap_headwear"
+  - "muffin"
+  - "bagel"
+  - "onion"
+  - "orange_fruit"
+  # Rigid Everyday Objects (varied sizes & shapes)
+  - "book"
+  - "mouse_computer_equipment"
+  - "flowerpot"
+  - "sculpture"
+  - "first-aid_kit"
+  - "battery"
+  - "dog_collar"
+  - "dustpan"
+  - "scraper"
 
-sequences_per_category: 5     # 8 categories x 5 = 40 sequences total
+sequences_per_category: 1     # 40 categories x 1 = 40 sequences
 sample_fps: 2                 # Extract 2 frames/sec to keep RAM/disk low
 min_duration_sec: 5.0
