@@ -33,12 +33,10 @@ htmlcov/
 .env.*.local
 
 # Data & Models (keep .gitkeep)
-data/raw_uco3d/*
-!data/raw_uco3d/.gitkeep
-data/degraded_videos/*
-!data/degraded_videos/.gitkeep
-data/processed/*
-!data/processed/.gitkeep
+external/
+data/raw_uco3d/
+data/degraded_videos/
+data/processed/
 models/*
 !models/.gitkeep
 
