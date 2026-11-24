@@ -1,0 +1,17 @@
+uco3d_root: "data/raw_uco3d"
+processed_root: "data/processed"
+
+# 8 diverse categories across shapes, sizes, and surface textures
+target_categories:
+  - "mug"               # Small, curved, often glossy ceramic (specular test)
+  - "sneakers"          # Medium, complex matte texture (ideal baseline)
+  - "laptop"            # Flat geometry, reflective screen + dark keyboard
+  - "teddy_bear"        # Soft, rich micro-texture, organic shape
+  - "bicycle"           # Large, thin tubular geometry (challenging SfM)
+  - "bowl"              # Concave interior occlusion test
+  - "toy"               # Diverse colors/shapes, plastic sheen
+  - "chair"             # Large furniture, multi-leg occlusion
+
+sequences_per_category: 5     # 8 categories x 5 = 40 sequences total
+sample_fps: 2                 # Extract 2 frames/sec to keep RAM/disk low
+min_duration_sec: 5.0
