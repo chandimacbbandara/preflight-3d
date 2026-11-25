@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-11-25 10:23:02",
+  "generated_at": "2026-11-25 10:41:14",
   "environment": {
     "os": "Ubuntu Linux",
     "ram_gb": 12.0,
     "gpu": "None (CPU-only)",
     "disk_total_gb": 232.64,
-    "disk_used_gb": 211.15,
-    "disk_free_gb": 9.6
+    "disk_used_gb": 211.72,
+    "disk_free_gb": 9.03
   },
   "milestones": {
     "step_1_download": {
