@@ -79,10 +79,13 @@ RECOMMENDATION_CATALOG = {
 def _passes_physics_verification(defect_code: str, features: dict) -> bool:
     """
     Verify an ML-predicted defect against physical CV measurements to suppress
-    false positives on real-world captures (e.g., smooth tabletops or gentle window gradients).
+    false positives on real-world captures (e.g., turntable loops or indoor lighting gradients).
     """
     if defect_code == "incomplete_orbit":
-        # High start-to-end loop closure over a >=10s capture proves a full 360° orbit
+        # Strong start-to-end loop closure with active motion proves a closed 360° orbit
+        # (handles both slower handheld orbits and faster turntable captures)
+        if features["loop_closure_inlier_ratio"] >= 0.50 and features["optical_flow_mean"] >= 2.0:
+            return False
         if features["loop_closure_inlier_ratio"] >= 0.45 and features["duration_sec"] >= 10.0:
             return False
         return True
@@ -156,6 +159,8 @@ def _compute_cv_health_score(features: dict) -> float:
         min(1.0, features["cumulative_pan_px"] / 30.0),
     )
     orbit_score = 0.5 * duration_factor + 0.5 * coverage_factor
+    if features["loop_closure_inlier_ratio"] >= 0.50 and features["optical_flow_mean"] >= 2.0:
+        orbit_score = max(orbit_score, coverage_factor * 0.95)
 
     return float(
         0.25 * sharpness_score
@@ -182,18 +187,19 @@ class PreFlightAnalyzer:
         # 1. ML Predictions (Soft-Voting Ensemble + Tuned XGBoost Readiness)
         defect_probs = self.defect_model.predict_proba(X_input)[0]
         class_names = list(self.defect_le.classes_)
-        prob_map = {cls: round(float(p), 4) for cls, p in zip(class_names, defect_probs)}
+        raw_prob_map = {cls: float(p) for cls, p in zip(class_names, defect_probs)}
 
         binary_probs = self.binary_model.predict_proba(X_input)[0]
         good_prob = float(binary_probs[1])
-        clean_class_prob = float(prob_map.get("none", 0.0))
+        clean_class_prob = float(raw_prob_map.get("none", 0.0))
 
         # 2. Hybrid Diagnosis: ML probabilities gated by physical CV verification
         detected_issues = []
         suppressed_prob_mass = 0.0
+        calibrated_prob_map = dict(raw_prob_map)
 
         sorted_defects = sorted(
-            [(cls, p) for cls, p in prob_map.items() if cls != "none"],
+            [(cls, p) for cls, p in raw_prob_map.items() if cls != "none"],
             key=lambda x: x[1],
             reverse=True,
         )
@@ -203,6 +209,12 @@ class PreFlightAnalyzer:
                     detected_issues.append((cls, prob, "ML Model"))
                 else:
                     suppressed_prob_mass += prob
+                    calibrated_prob_map[cls] = 0.0
+
+        if suppressed_prob_mass > 0.0 and "none" in calibrated_prob_map:
+            calibrated_prob_map["none"] = min(1.0, calibrated_prob_map["none"] + suppressed_prob_mass)
+
+        prob_map = {cls: round(float(p), 4) for cls, p in calibrated_prob_map.items()}
 
         # Deterministic physics guardrails for edge cases missed by ML
         existing_codes = {code for code, _, _ in detected_issues}
