@@ -1,27 +1,17 @@
 {
-  "generated_at": "2026-11-25 09:31:00",
+  "generated_at": "2026-11-25 10:23:02",
   "environment": {
     "os": "Ubuntu Linux",
     "ram_gb": 12.0,
     "gpu": "None (CPU-only)",
     "disk_total_gb": 232.64,
-    "disk_used_gb": 211.05,
-    "disk_free_gb": 9.7
+    "disk_used_gb": 211.15,
+    "disk_free_gb": 9.6
   },
   "milestones": {
     "step_1_download": {
       "source": "facebook/uco3d (Hugging Face examples.zip)",
       "archive_size_gb": 8.71,
-      "selective_modalities": [
-        "rgb_video.mp4",
-        "mask_video.mkv",
-        ".ply point clouds",
-        "metadata.sqlite"
-      ],
-      "skipped_modalities": [
-        "depth_maps.h5",
-        "gaussian_splats"
-      ],
       "downloaded_categories": 52,
       "downloaded_sequences": 52
     },
@@ -225,6 +215,211 @@
           "loop_closure_inlier_ratio": 0.533
         }
       }
+    },
+    "step_6_model_training_and_tuning": {
+      "validation_strategy": "5-Fold StratifiedGroupKFold (grouped by sequence_id)",
+      "best_defect_model": "SoftVoting_Ensemble",
+      "best_binary_model": "XGBoost_Tuned",
+      "tuned_hyperparameters": {
+        "defect_diagnosis": {
+          "RandomForest": {
+            "n_estimators": 350,
+            "min_samples_split": 4,
+            "min_samples_leaf": 3,
+            "max_features": "sqrt",
+            "max_depth": null
+          },
+          "XGBoost": {
+            "subsample": 0.85,
+            "reg_lambda": 2.0,
+            "reg_alpha": 1.0,
+            "n_estimators": 150,
+            "max_depth": 4,
+            "learning_rate": 0.03,
+            "colsample_bytree": 0.7
+          },
+          "LightGBM": {
+            "subsample": 0.85,
+            "reg_lambda": 1.0,
+            "num_leaves": 23,
+            "n_estimators": 150,
+            "min_child_samples": 10,
+            "max_depth": 3,
+            "learning_rate": 0.08,
+            "colsample_bytree": 0.85
+          }
+        },
+        "readiness_binary": {
+          "RandomForest": {
+            "n_estimators": 150,
+            "min_samples_split": 4,
+            "min_samples_leaf": 1,
+            "max_features": 0.7,
+            "max_depth": 9
+          },
+          "XGBoost": {
+            "subsample": 0.75,
+            "reg_lambda": 1.0,
+            "reg_alpha": 0.5,
+            "n_estimators": 220,
+            "max_depth": 5,
+            "learning_rate": 0.08,
+            "colsample_bytree": 1.0
+          },
+          "LightGBM": {
+            "subsample": 0.85,
+            "reg_lambda": 1.0,
+            "num_leaves": 23,
+            "n_estimators": 150,
+            "min_child_samples": 10,
+            "max_depth": 3,
+            "learning_rate": 0.08,
+            "colsample_bytree": 0.85
+          }
+        }
+      },
+      "benchmark_results": [
+        {
+          "task": "Defect_Diagnosis_7Class",
+          "stage": "1_Baseline",
+          "model": "RandomForest",
+          "cv_accuracy_mean": 0.7393,
+          "cv_accuracy_std": 0.0571,
+          "cv_macro_f1_mean": 0.7267,
+          "holdout_accuracy": 0.7321,
+          "holdout_macro_f1": 0.743
+        },
+        {
+          "task": "Defect_Diagnosis_7Class",
+          "stage": "1_Baseline",
+          "model": "XGBoost",
+          "cv_accuracy_mean": 0.7607,
+          "cv_accuracy_std": 0.072,
+          "cv_macro_f1_mean": 0.7516,
+          "holdout_accuracy": 0.7679,
+          "holdout_macro_f1": 0.764
+        },
+        {
+          "task": "Defect_Diagnosis_7Class",
+          "stage": "1_Baseline",
+          "model": "LightGBM",
+          "cv_accuracy_mean": 0.7536,
+          "cv_accuracy_std": 0.0602,
+          "cv_macro_f1_mean": 0.747,
+          "holdout_accuracy": 0.75,
+          "holdout_macro_f1": 0.7577
+        },
+        {
+          "task": "Defect_Diagnosis_7Class",
+          "stage": "2_Tuned",
+          "model": "RandomForest_Tuned",
+          "cv_accuracy_mean": 0.7607,
+          "cv_accuracy_std": 0.0702,
+          "cv_macro_f1_mean": 0.7491,
+          "holdout_accuracy": 0.7679,
+          "holdout_macro_f1": 0.7617
+        },
+        {
+          "task": "Defect_Diagnosis_7Class",
+          "stage": "2_Tuned",
+          "model": "XGBoost_Tuned",
+          "cv_accuracy_mean": 0.7643,
+          "cv_accuracy_std": 0.0398,
+          "cv_macro_f1_mean": 0.7607,
+          "holdout_accuracy": 0.7321,
+          "holdout_macro_f1": 0.7287
+        },
+        {
+          "task": "Defect_Diagnosis_7Class",
+          "stage": "2_Tuned",
+          "model": "LightGBM_Tuned",
+          "cv_accuracy_mean": 0.7643,
+          "cv_accuracy_std": 0.0633,
+          "cv_macro_f1_mean": 0.7619,
+          "holdout_accuracy": 0.7857,
+          "holdout_macro_f1": 0.799
+        },
+        {
+          "task": "Defect_Diagnosis_7Class",
+          "stage": "3_Ensemble",
+          "model": "SoftVoting_Ensemble",
+          "cv_accuracy_mean": 0.7714,
+          "cv_accuracy_std": 0.0522,
+          "cv_macro_f1_mean": 0.7655,
+          "holdout_accuracy": 0.7679,
+          "holdout_macro_f1": 0.7721
+        },
+        {
+          "task": "Readiness_Binary",
+          "stage": "1_Baseline",
+          "model": "RandomForest",
+          "cv_accuracy_mean": 0.8321,
+          "cv_accuracy_std": 0.0182,
+          "cv_macro_f1_mean": 0.7021,
+          "holdout_accuracy": 0.8036,
+          "holdout_macro_f1": 0.7168
+        },
+        {
+          "task": "Readiness_Binary",
+          "stage": "1_Baseline",
+          "model": "XGBoost",
+          "cv_accuracy_mean": 0.8607,
+          "cv_accuracy_std": 0.0208,
+          "cv_macro_f1_mean": 0.715,
+          "holdout_accuracy": 0.875,
+          "holdout_macro_f1": 0.7573
+        },
+        {
+          "task": "Readiness_Binary",
+          "stage": "1_Baseline",
+          "model": "LightGBM",
+          "cv_accuracy_mean": 0.8393,
+          "cv_accuracy_std": 0.0226,
+          "cv_macro_f1_mean": 0.6809,
+          "holdout_accuracy": 0.8571,
+          "holdout_macro_f1": 0.7352
+        },
+        {
+          "task": "Readiness_Binary",
+          "stage": "2_Tuned",
+          "model": "RandomForest_Tuned",
+          "cv_accuracy_mean": 0.8464,
+          "cv_accuracy_std": 0.0182,
+          "cv_macro_f1_mean": 0.7268,
+          "holdout_accuracy": 0.8393,
+          "holdout_macro_f1": 0.7363
+        },
+        {
+          "task": "Readiness_Binary",
+          "stage": "2_Tuned",
+          "model": "XGBoost_Tuned",
+          "cv_accuracy_mean": 0.8679,
+          "cv_accuracy_std": 0.0143,
+          "cv_macro_f1_mean": 0.7302,
+          "holdout_accuracy": 0.8571,
+          "holdout_macro_f1": 0.7352
+        },
+        {
+          "task": "Readiness_Binary",
+          "stage": "2_Tuned",
+          "model": "LightGBM_Tuned",
+          "cv_accuracy_mean": 0.8536,
+          "cv_accuracy_std": 0.0262,
+          "cv_macro_f1_mean": 0.6975,
+          "holdout_accuracy": 0.8571,
+          "holdout_macro_f1": 0.7352
+        },
+        {
+          "task": "Readiness_Binary",
+          "stage": "3_Ensemble",
+          "model": "SoftVoting_Ensemble",
+          "cv_accuracy_mean": 0.85,
+          "cv_accuracy_std": 0.0182,
+          "cv_macro_f1_mean": 0.7092,
+          "holdout_accuracy": 0.8571,
+          "holdout_macro_f1": 0.7352
+        }
+      ]
     }
   }
 }

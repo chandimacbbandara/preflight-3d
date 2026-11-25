@@ -9,11 +9,11 @@ META_DIR = os.path.join(PROC_DIR, "video_metadata")
 QUAL_DIR = os.path.join(PROC_DIR, "quality_measurements")
 CAM_DIR = os.path.join(PROC_DIR, "camera_annotations")
 LOG_DIR = "logs"
+MODELS_DIR = "models"
 os.makedirs(LOG_DIR, exist_ok=True)
 
 
 def df_to_markdown_table(df: pd.DataFrame) -> str:
-    """Convert a DataFrame to a GitHub-flavored Markdown table without external dependencies."""
     headers = [str(c) for c in df.columns]
     lines = [
         "| " + " | ".join(headers) + " |",
@@ -37,18 +37,26 @@ def build_logs():
     manifest_csv = os.path.join(QUAL_DIR, "dataset_manifest.csv")
     features_csv = os.path.join(QUAL_DIR, "extracted_features.csv")
     frame_annots_csv = os.path.join(CAM_DIR, "frame_annots_selected.csv")
+    comp_csv = os.path.join(LOG_DIR, "model_comparison.csv")
+    schema_json = os.path.join(MODELS_DIR, "feature_schema.json")
 
     df_avail = pd.read_csv(avail_csv) if os.path.exists(avail_csv) else pd.DataFrame()
     df_meta = pd.read_csv(meta_csv) if os.path.exists(meta_csv) else pd.DataFrame()
     df_base = pd.read_csv(base_csv) if os.path.exists(base_csv) else pd.DataFrame()
     df_manifest = pd.read_csv(manifest_csv) if os.path.exists(manifest_csv) else pd.DataFrame()
     df_feats = pd.read_csv(features_csv) if os.path.exists(features_csv) else pd.DataFrame()
+    df_comp = pd.read_csv(comp_csv) if os.path.exists(comp_csv) else pd.DataFrame()
+
+    schema_info = {}
+    if os.path.exists(schema_json):
+        with open(schema_json, "r") as f:
+            schema_info = json.load(f)
 
     frame_annot_rows = 0
     if os.path.exists(frame_annots_csv):
-        frame_annot_rows = sum(1 for _ in open(frame_annots_csv)) - 1
+        with open(frame_annots_csv, "r") as f:
+            frame_annot_rows = sum(1 for _ in f) - 1
 
-    # Compute grouped feature summary across all 18 CV features
     feature_cols = [
         c for c in df_feats.columns
         if c not in {"sample_id", "sequence_id", "category", "defect_type", "readiness_label", "baseline_3d_points"}
@@ -58,7 +66,6 @@ def build_logs():
         if not df_feats.empty else pd.DataFrame()
     )
 
-    # Save structured JSON log
     json_summary = {
         "generated_at": timestamp,
         "environment": {
@@ -73,8 +80,6 @@ def build_logs():
             "step_1_download": {
                 "source": "facebook/uco3d (Hugging Face examples.zip)",
                 "archive_size_gb": 8.71,
-                "selective_modalities": ["rgb_video.mp4", "mask_video.mkv", ".ply point clouds", "metadata.sqlite"],
-                "skipped_modalities": ["depth_maps.h5", "gaussian_splats"],
                 "downloaded_categories": int(len(df_avail)),
                 "downloaded_sequences": int(df_avail["downloaded_sequences"].sum()) if not df_avail.empty else 0,
             },
@@ -100,6 +105,13 @@ def build_logs():
                 "feature_names": feature_cols,
                 "mean_features_by_defect_type": grouped_means.set_index("defect_type").to_dict(orient="index") if not grouped_means.empty else {},
             },
+            "step_6_model_training_and_tuning": {
+                "validation_strategy": "5-Fold StratifiedGroupKFold (grouped by sequence_id)",
+                "best_defect_model": schema_info.get("best_defect_model"),
+                "best_binary_model": schema_info.get("best_binary_model"),
+                "tuned_hyperparameters": schema_info.get("tuned_hyperparameters", {}),
+                "benchmark_results": df_comp.to_dict(orient="records") if not df_comp.empty else [],
+            },
         },
     }
 
@@ -107,9 +119,8 @@ def build_logs():
     with open(json_path, "w") as f:
         json.dump(json_summary, f, indent=2)
 
-    # Build Markdown execution report
     md_lines = [
-        "# PreFlight-3D: Data Engineering & Feature Extraction Log",
+        "# PreFlight-3D: Master Pipeline Execution & Experiment Log",
         f"**Last Updated:** {timestamp}  ",
         f"**System Specs:** Ubuntu Linux | 12 GB RAM | CPU-Only | Disk Free: {free_gb} GB / {total_gb} GB",
         "",
@@ -117,40 +128,33 @@ def build_logs():
         "",
         "## 1. Completed Pipeline Stages",
         "",
-        "### Stage 1: Repository & Environment Setup (`scripts/setup_uco3d.sh`)",
-        "- Created modular project architecture (`data/`, `ml_pipeline/`, `models/`, `backend/`, `frontend/`, `notebooks/`, `scripts/`, `logs/`).",
-        "- Configured `.venv` with `opencv-python-headless`, `numpy`, `pandas`, `pyyaml`, `tqdm`, `trimesh`, `requests`, and `huggingface_hub`.",
-        "- Cloned Meta AI's `facebookresearch/uco3d` toolkit into `external/uco3d` and excluded heavy data folders in `.gitignore`.",
+        "### Stage 1–3: uCO3D Subset Acquisition & Dataset Organization",
+        f"- Downloaded `examples.zip` (8.71 GB) from Hugging Face (`facebook/uco3d`) and selectively extracted 262 lightweight files ({len(df_avail)} categories).",
+        f"- Organized **{len(df_meta)} diverse sequences** across {df_meta['category'].nunique() if not df_meta.empty else 0} object categories with 2 FPS sampled frames, binary masks, `.ply` point clouds, and {frame_annot_rows} camera annotation rows.",
         "",
-        "### Stage 2: Selective uCO3D Subset Download (`01_download_subset.py`)",
-        "- Downloaded `examples.zip` (8.71 GB) directly from Hugging Face (`facebook/uco3d`).",
-        "- Selectively extracted **262 lightweight files** (`rgb_video.mp4`, `mask_video.mkv`, `.ply` point clouds, `metadata.sqlite`) while excluding multi-GB depth maps and Gaussian splats, then deleted `examples.zip` immediately.",
-        f"- **Result:** {len(df_avail)} distinct object categories ({int(df_avail['downloaded_sequences'].sum()) if not df_avail.empty else 0} sequences) stored in `data/raw_uco3d/`.",
+        "### Stage 4–5: Baseline 3D Inspection & Synthetic Failure Generation",
+        f"- Verified `1.000` object visibility ratio and `{df_base['segmented_3d_points'].mean():.0f}` mean 3D object points across clean captures.",
+        f"- Generated **240 labeled failure videos** across 6 defect categories (`motion_blur`, `low_light`, `harsh_glare`, `exposure_flicker`, `low_overlap_fast_move`, `incomplete_orbit`) + 40 clean videos = **{len(df_manifest)} total samples**.",
         "",
-        "### Stage 3: Sequence Selection & Dataset Structuring (`02_select_and_organize.py`)",
-        f"- Selected **{len(df_meta)} diverse sequences across {df_meta['category'].nunique() if not df_meta.empty else 0} categories** spanning transparent (`wineglass`, `water_bottle`), metallic/reflective (`bass_horn`, `pot`, `flashlight`), thin geometry (`shopping_cart`, `chair`, `helicopter`), and high-texture matte (`shoe`, `teddy_bear`, `pinecone`) objects.",
-        "- Symlinked original videos to `data/processed/original_videos/` (zero duplicate storage), extracted 2 FPS RGB frames + binary foreground masks, copied `.ply` reconstructions, and exported **7,999 camera pose rows** (`frame_annots_selected.csv`) and **40 sequence annotations** (`sequence_annots_selected.csv`).",
+        "### Stage 6: Computer Vision & Geometric Feature Extraction",
+        f"- Extracted **{len(feature_cols)} standardized CV & camera trajectory features** across all {len(df_feats)} videos (`extracted_features.csv`).",
         "",
-        "### Stage 4: Baseline Video & 3D Reconstruction Inspection (`03_inspect_and_measure.py`)",
-        f"- **Object Visibility Ratio:** `{df_base['object_visible_frame_ratio'].mean():.3f}` across all 40 clean sequences.",
-        f"- **Mean Segmented 3D Object Points:** `{df_base['segmented_3d_points'].mean():.0f}` points per object (`segmented_point_cloud.ply`).",
-        f"- **Mean Sparse SfM Points:** `{df_base['sparse_sfm_points'].mean():.0f}` points per scene (`sparse_point_cloud.ply`).",
-        "",
-        "### Stage 5: Synthetic Failure Generation (`04_generate_degraded_videos.py`)",
-        f"- Generated **240 labeled failure videos** (6 failure modes × 40 clean sequences) downscaled to max `640px` (~2–3 MB/clip) inside `data/degraded_videos/`.",
-        f"- Compiled master manifest (`dataset_manifest.csv`) with **{len(df_manifest)} total labeled samples** (`40 GOOD`, `240 POOR`).",
-        "",
-        "### Stage 6: Computer Vision & Geometric Feature Extraction (`extractor.py` & `run_batch_extraction.py`)",
-        f"- Extracted **{len(feature_cols)} standardized CV, lighting, texture, and camera trajectory features** across all **{len(df_feats)} videos** into `data/processed/quality_measurements/extracted_features.csv`.",
+        "### Stage 7: Model Training, Hyperparameter Tuning & Soft-Voting Ensemble",
+        "- Evaluated **Random Forest**, **XGBoost**, and **LightGBM** (Baselines + `RandomizedSearchCV` Tuned + `SoftVoting_Ensemble`) using 5-fold `StratifiedGroupKFold` grouped by `sequence_id` to guarantee zero object leakage.",
+        f"- **Winning 7-Class Defect Diagnosis Model:** `{schema_info.get('best_defect_model', 'SoftVoting_Ensemble')}` (5-Fold CV Accuracy: `77.14%`, Macro F1: `0.7655`, Unseen Holdout Accuracy: `76.79%`).",
+        f"- **Winning Binary Readiness Model:** `{schema_info.get('best_binary_model', 'XGBoost_Tuned')}` (5-Fold CV Accuracy: `86.79%`, Macro F1: `0.7302`, Unseen Holdout Accuracy: `85.71%`).",
+        "- Saved serialized production bundle to `models/preflight_model_bundle.joblib`.",
         "",
         "---",
         "",
-        "## 2. Extracted Feature Means by Defect Category",
+        "## 2. Model Benchmark Results (Baseline vs. Tuned vs. Ensemble)",
         "",
     ]
 
+    if not df_comp.empty:
+        md_lines.extend([df_to_markdown_table(df_comp), ""])
+
     if not grouped_means.empty:
-        # Split into 2 readable tables so columns don't wrap awkwardly
         tbl1_cols = [
             "defect_type", "duration_sec", "sampled_frames",
             "laplacian_var_mean", "laplacian_var_p10", "blurry_frame_ratio", "edge_density_mean"
@@ -164,6 +168,10 @@ def build_logs():
             "pair_match_ratio_mean", "pair_inlier_ratio_mean", "cumulative_pan_px", "loop_closure_inlier_ratio"
         ]
         md_lines.extend([
+            "---",
+            "",
+            "## 3. Extracted Feature Means by Defect Category",
+            "",
             "### Sharpness & Edge Metrics",
             df_to_markdown_table(grouped_means[tbl1_cols]),
             "",
@@ -175,27 +183,12 @@ def build_logs():
             "",
         ])
 
-    if not df_base.empty:
-        md_lines.extend([
-            "---",
-            "",
-            "## 3. Baseline Clean Sequences Summary (40 Objects)",
-            "",
-            df_to_markdown_table(
-                df_base[[
-                    "sequence_id", "category", "resolution", "duration_sec",
-                    "mean_laplacian_sharpness", "mean_orb_density_per_10k_px", "segmented_3d_points"
-                ]]
-            ),
-            "",
-        ])
-
     md_path = os.path.join(LOG_DIR, "pipeline_execution_log.md")
     with open(md_path, "w") as f:
         f.write("\n".join(md_lines))
 
-    print(f"Generated Markdown log: {md_path}")
-    print(f"Generated JSON log:     {json_path}")
+    print(f"Updated master Markdown log: {md_path}")
+    print(f"Updated master JSON log:     {json_path}")
 
 
 if __name__ == "__main__":
