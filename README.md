@@ -233,9 +233,33 @@ Inside [`backend/app/services/recommendation_engine.py`](backend/app/services/re
 - `GET /api/samples` — Lists 14 curated benchmark samples (2 per defect category) from `dataset_manifest.csv`.
 - `POST /api/analyze-sample/{sample_id}` — Runs live feature extraction + ensemble inference on a selected local dataset sample.
 
-### React 19 + Vite Dashboard ([`frontend/src/App.jsx`](frontend/src/App.jsx))
-- Drag-and-drop video uploader with live HTML5 preview + **Test Dataset** benchmark selector.
-- Readiness Score ring, Verdict badge, Actionable Capture Recommendations with severity & remediation steps, Soft-Voting Ensemble probability bars, and a 16-tile live CV Telemetry readout.
+### React 19 + Vite Dashboard ([`frontend/src/App.jsx`](frontend/src/App.jsx) & [`frontend/src/pages/HowItWorks.jsx`](frontend/src/pages/HowItWorks.jsx))
+- **Pre-Flight Analyzer:** Drag-and-drop video uploader with HTML5 preview, **Test Dataset** selector + 1-click preset chips, animated SVG Readiness Gauge, 4-Pillar Capture Health Breakdown, Actionable Capture Recommendations, Soft-Voting Ensemble probability bars, and 16-tile CV Telemetry readout.
+- **How It Works (A–Z):** Interactive architecture walkthrough covering the Problem vs. Hybrid Solution, Stage A → I pipeline explorer, sample & defect GIF showcases, 40-category taxonomy, benchmark tables, and completed output gallery.
+
+---
+
+## Completed Final Output — Live Dashboard Results
+
+Below are three completed end-to-end inference outputs captured directly in the live PreFlight-3D dashboard on uploaded test and smartphone captures:
+
+### 1. Geometric Guardrail Catch — Fast Panning (`54 / 100` · `USABLE WITH WARNINGS`)
+- **Video:** `1-34403-89911.mp4.down.mp4` (`28.667s`, `13.00 MB`, potted plant capture)
+- **Diagnostic Proof:** Even though the raw ML classifier scored Clean at `81.5%`, **Peak Optical Flow spiked to `25.493 px`** (`Mean Optical Flow: 13.44 px`), triggering the deterministic **Geometric Guardrail (`72%`)** to warn about insufficient frame overlap.
+
+![PreFlight-3D Output 1 - Geometric Guardrail](img/57939c0f-a5c6-4f4f-a697-8239f34f55d0.png)
+
+### 2. Ensemble Overlap Warning — Moderate Fast Move (`68 / 100` · `USABLE WITH WARNINGS`)
+- **Video:** `1-41035-27122.mp4.down.mp4` (`28.7s`, `4.44 MB`, textured woven object)
+- **Diagnostic Proof:** The `SoftVoting_Ensemble` flagged **`Low Overlap Fast Move` at `26.1%`** (`Peak Optical Flow: 18.633 px`, `RANSAC Inlier Ratio: 88.6%`), surfacing camera pacing guidance to maintain `>70%` consecutive frame overlap.
+
+![PreFlight-3D Output 2 - Ensemble Overlap Warning](img/a3122948-cbd7-4800-af0d-147b602b41b8.png)
+
+### 3. Smartphone Low-Light Rejection (`29 / 100` · `RECAPTURE RECOMMENDED`)
+- **Video:** `WhatsApp Video 2026-11-19 at 23.12.35.mp4` (`2.833s`, `0.32 MB`, real smartphone capture)
+- **Diagnostic Proof:** Dark scene shadows dropped `Mean Brightness` to `75.214 / 255` with `22.3%` underexposed pixels. The ML model flagged **`Low Light` (`32.7%` / `33%` High Severity)** and generated concrete diffuse-lighting fixes before running 3D reconstruction.
+
+![PreFlight-3D Output 3 - Smartphone Low Light Rejection](img/ddd3a8f2-305d-417a-881e-74e3b66e599c.png)
 
 ---
 
@@ -244,6 +268,7 @@ Inside [`backend/app/services/recommendation_engine.py`](backend/app/services/re
 ```text
 preflight-3d/
 ├── assets/                          # Animated README showcase & defect comparison GIFs
+├── img/                             # Completed final output screenshots from live UI runs
 ├── backend/
 │   └── app/
 │       ├── api/routes.py            # FastAPI endpoints (/health, /analyze, /samples, /analyze-sample)
@@ -257,7 +282,11 @@ preflight-3d/
 │   ├── degraded_videos/             # 240 synthetic failure videos across 6 folders
 │   └── processed/                   # Frames, masks, .ply clouds, metadata & feature CSVs
 ├── frontend/                        # React 19 + Vite web dashboard
-│   └── src/App.jsx
+│   ├── public/                      # Static showcase GIFs & live result screenshots
+│   └── src/
+│       ├── data/projectData.js      # Verified pipeline, benchmark & gallery metadata
+│       ├── pages/HowItWorks.jsx     # Interactive A–Z architecture & benchmark page
+│       └── App.jsx                  # Pre-Flight Analyzer & top-level navigation
 ├── logs/                            # Benchmark CSVs, evaluation report, & JSON execution logs
 │   ├── model_comparison.csv
 │   ├── model_evaluation_report.md
