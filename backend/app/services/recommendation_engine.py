@@ -76,6 +76,95 @@ RECOMMENDATION_CATALOG = {
 }
 
 
+def _passes_physics_verification(defect_code: str, features: dict) -> bool:
+    """
+    Verify an ML-predicted defect against physical CV measurements to suppress
+    false positives on real-world captures (e.g., smooth tabletops or gentle window gradients).
+    """
+    if defect_code == "incomplete_orbit":
+        # High start-to-end loop closure over a >=10s capture proves a full 360° orbit
+        if features["loop_closure_inlier_ratio"] >= 0.45 and features["duration_sec"] >= 10.0:
+            return False
+        return True
+
+    if defect_code == "exposure_flicker":
+        # Normal directional indoor lighting produces step diffs ~7-14; true flicker is >= 18
+        return (
+            features["brightness_step_diff_mean"] >= 18.0
+            or features["brightness_std"] >= 32.0
+        )
+
+    if defect_code == "motion_blur":
+        return (
+            features["laplacian_var_mean"] < 120.0
+            or features["blurry_frame_ratio"] > 0.20
+        )
+
+    if defect_code == "low_light":
+        return (
+            features["brightness_mean"] < 85.0
+            or features["dark_pixel_ratio"] > 0.25
+        )
+
+    if defect_code == "harsh_glare":
+        return (
+            features["specular_glare_ratio"] > 0.12
+            or features["brightness_mean"] > 195.0
+        )
+
+    if defect_code == "low_overlap_fast_move":
+        return (
+            features["pair_inlier_ratio_mean"] < 0.45
+            or features["optical_flow_max"] > 18.0
+        )
+
+    return True
+
+
+def _compute_cv_health_score(features: dict) -> float:
+    """Compute a normalized [0, 1] reconstruction health score from deterministic CV telemetry."""
+    # 1. Focus & sharpness (25%)
+    sharpness_score = min(1.0, features["laplacian_var_mean"] / 150.0) * (
+        1.0 - min(1.0, features["blurry_frame_ratio"])
+    )
+
+    # 2. Feature tracking & multi-view overlap (30%)
+    tracking_score = (
+        0.65 * min(1.0, features["pair_inlier_ratio_mean"] / 0.65)
+        + 0.35 * min(1.0, features["orb_keypoints_mean"] / 250.0)
+    )
+
+    # 3. Lighting balance, glare & exposure stability (25%)
+    bright = features["brightness_mean"]
+    if 75.0 <= bright <= 190.0:
+        bright_comfort = 1.0
+    elif bright < 75.0:
+        bright_comfort = max(0.0, bright / 75.0)
+    else:
+        bright_comfort = max(0.0, (255.0 - bright) / 65.0)
+
+    glare_comfort = max(0.0, 1.0 - features["specular_glare_ratio"] * 3.0)
+    flicker_comfort = max(
+        0.0, 1.0 - max(0.0, (features["brightness_step_diff_mean"] - 8.0) / 28.0)
+    )
+    lighting_score = bright_comfort * glare_comfort * flicker_comfort
+
+    # 4. Orbit duration & loop closure (20%)
+    duration_factor = min(1.0, features["duration_sec"] / 12.0)
+    coverage_factor = max(
+        min(1.0, features["loop_closure_inlier_ratio"] / 0.45),
+        min(1.0, features["cumulative_pan_px"] / 30.0),
+    )
+    orbit_score = 0.5 * duration_factor + 0.5 * coverage_factor
+
+    return float(
+        0.25 * sharpness_score
+        + 0.30 * tracking_score
+        + 0.25 * lighting_score
+        + 0.20 * orbit_score
+    )
+
+
 class PreFlightAnalyzer:
     def __init__(self, bundle_path: str = BUNDLE_PATH):
         if not os.path.exists(bundle_path):
@@ -99,13 +188,10 @@ class PreFlightAnalyzer:
         good_prob = float(binary_probs[1])
         clean_class_prob = float(prob_map.get("none", 0.0))
 
-        # Calibrated 0-100 Readiness Score blending binary confidence & clean-class probability
-        readiness_score = int(round((0.55 * good_prob + 0.45 * clean_class_prob) * 100))
-
-        # 2. Hybrid Diagnosis: combine ML probabilities + deterministic physics guardrails
+        # 2. Hybrid Diagnosis: ML probabilities gated by physical CV verification
         detected_issues = []
+        suppressed_prob_mass = 0.0
 
-        # Primary ML-predicted defect (if not 'none' and probability >= 0.25)
         sorted_defects = sorted(
             [(cls, p) for cls, p in prob_map.items() if cls != "none"],
             key=lambda x: x[1],
@@ -113,21 +199,46 @@ class PreFlightAnalyzer:
         )
         for cls, prob in sorted_defects:
             if prob >= 0.25:
-                detected_issues.append((cls, prob, "ML Model"))
+                if _passes_physics_verification(cls, features):
+                    detected_issues.append((cls, prob, "ML Model"))
+                else:
+                    suppressed_prob_mass += prob
 
-        # Physics guardrails for edge cases (e.g., low overlap / fast movement or low texture)
+        # Deterministic physics guardrails for edge cases missed by ML
         existing_codes = {code for code, _, _ in detected_issues}
         if "low_overlap_fast_move" not in existing_codes and (
             features["pair_inlier_ratio_mean"] < 0.22 or features["optical_flow_max"] > 22.0
         ):
             detected_issues.append(("low_overlap_fast_move", 0.72, "Geometric Guardrail"))
 
-        if "incomplete_orbit" not in existing_codes and (
-            features["cumulative_pan_px"] < 20.0 and features["duration_sec"] < 8.0
+        if (
+            "incomplete_orbit" not in existing_codes
+            and features["loop_closure_inlier_ratio"] < 0.35
+            and features["cumulative_pan_px"] < 20.0
+            and features["duration_sec"] < 9.0
         ):
             detected_issues.append(("incomplete_orbit", 0.70, "Trajectory Guardrail"))
 
-        # Determine final verdict
+        # 3. Calibrated 0-100 Readiness Score
+        cv_health = _compute_cv_health_score(features)
+        effective_clean_prob = min(1.0, clean_class_prob + suppressed_prob_mass)
+        ml_clean_conf = max(good_prob, effective_clean_prob)
+
+        if not detected_issues:
+            raw_score = (0.60 * cv_health + 0.40 * ml_clean_conf) * 100.0
+            readiness_score = int(np.clip(round(raw_score), 65, 98))
+        else:
+            max_defect_conf = max(conf for _, conf, _ in detected_issues)
+            has_high_severity = any(
+                RECOMMENDATION_CATALOG[code]["severity"] == "HIGH"
+                for code, _, _ in detected_issues
+            )
+            penalty = max_defect_conf * (65.0 if has_high_severity else 40.0)
+            raw_score = (0.50 * cv_health + 0.50 * good_prob) * 100.0 - penalty
+            upper_bound = 44 if has_high_severity else 68
+            readiness_score = int(np.clip(round(raw_score), 1, upper_bound))
+
+        # 4. Determine Final Verdict
         if readiness_score >= 70 and not detected_issues:
             verdict = "READY_FOR_RECONSTRUCTION"
             summary = "Capture quality looks solid. Sharpness, lighting consistency, and 360° coverage are suitable for COLMAP / 3DGS."
@@ -180,7 +291,6 @@ if __name__ == "__main__":
     analyzer = PreFlightAnalyzer()
     df_manifest = pd.read_csv("data/processed/quality_measurements/dataset_manifest.csv")
 
-    # Quick smoke test on 1 clean video and 2 degraded videos
     test_samples = [
         df_manifest[df_manifest["defect_type"] == "none"].iloc[0]["video_path"],
         df_manifest[df_manifest["defect_type"] == "harsh_glare"].iloc[0]["video_path"],
