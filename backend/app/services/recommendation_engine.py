@@ -219,7 +219,11 @@ class PreFlightAnalyzer:
         # Deterministic physics guardrails for edge cases missed by ML
         existing_codes = {code for code, _, _ in detected_issues}
         if "low_overlap_fast_move" not in existing_codes and (
-            features["pair_inlier_ratio_mean"] < 0.22 or features["optical_flow_max"] > 22.0
+            features["pair_inlier_ratio_mean"] < 0.25
+            or (
+                features["optical_flow_max"] > 22.0
+                and features["pair_inlier_ratio_mean"] < 0.45
+            )
         ):
             detected_issues.append(("low_overlap_fast_move", 0.72, "Geometric Guardrail"))
 

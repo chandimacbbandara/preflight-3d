@@ -32,13 +32,15 @@ htmlcov/
 .env.local
 .env.*.local
 
-# Data & Models (keep .gitkeep)
+# Data & Models (keep .gitkeep & production model bundle/schema for Streamlit Cloud)
 external/
 data/raw_uco3d/
 data/degraded_videos/
 data/processed/
 models/*
 !models/.gitkeep
+!models/preflight_model_bundle.joblib
+!models/feature_schema.json
 
 # Jupyter Notebooks
 .ipynb_checkpoints/
