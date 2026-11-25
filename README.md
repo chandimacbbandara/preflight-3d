@@ -309,6 +309,41 @@ preflight-3d/
 
 ---
 
+## ☁️ Streamlit Cloud Deployment
+
+[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://preflight-3d.streamlit.app)
+
+The app is deployable in one click on [Streamlit Community Cloud](https://streamlit.io/cloud) — **no server required**:
+
+| File | Purpose |
+|------|---------|
+| `streamlit_app.py` | Main entry point — imports `PreFlightAnalyzer` directly |
+| `requirements.txt` | Pinned Python deps matching the serialized model |
+| `packages.txt` | System packages (`libgl1` for headless OpenCV) |
+| `.streamlit/config.toml` | Dark telemetry theme + 100 MB upload limit |
+| `sample_videos/` | 4 tracked demo clips for live testing |
+| `models/preflight_model_bundle.joblib` | 4.6 MB model bundle tracked in Git |
+
+**Deploy steps:**
+1. Push the `dev` branch to GitHub (`chandimacbbandara/preflight-3d`)
+2. Go to [share.streamlit.io](https://share.streamlit.io) → **New app** → select repo + branch + `streamlit_app.py`
+3. No secrets needed — the model is tracked in Git
+4. Click **Deploy** — the app starts in ~90 seconds
+
+**Run locally (Streamlit):**
+```bash
+source .venv/bin/activate
+pip install streamlit          # already in requirements.txt
+streamlit run streamlit_app.py
+# → http://localhost:8501
+```
+
+> [!NOTE]
+> The Streamlit app imports `PreFlightAnalyzer` **directly** (no FastAPI server).
+> The FastAPI backend (`backend/`) and React frontend (`frontend/`) remain intact for local full-stack dev via `bash scripts/run_dev.sh`.
+
+---
+
 ## Quick Start
 
 ### 1. Run the Full-Stack App (Backend + Frontend)
